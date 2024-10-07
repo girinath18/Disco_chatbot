@@ -24,7 +24,7 @@ SECRET_KEY = "django-insecure-q%mmz$sz(4y_pe-+_5xgypz(bdsu5ro1l)!232z&4msh138&ot
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -127,6 +127,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 # URL to use when referring to static files
 STATIC_URL = '/static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles_build', 'static')
+MEDIA_URLS ='/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
 
 # Directory where collected static files will be stored
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
