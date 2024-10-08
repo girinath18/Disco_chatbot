@@ -1,5 +1,5 @@
-django
-psycopg2-binary
-scikit-learn
-nltk
+Django==5.1.1
+psycopg2-binary==2.9.9
+scikit-learn==1.5.0
+nltk==3.8.1
 
