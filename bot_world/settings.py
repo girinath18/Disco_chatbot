@@ -59,6 +59,7 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "bot_world.wsgi.application"
 
+
 # Database configuration
 DATABASES = {
     'default': {
