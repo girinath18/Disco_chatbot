@@ -45,7 +45,7 @@ def ensure_nltk_resources():
 ensure_nltk_resources()
 
 lemmer = WordNetLemmatizer()
-
+ 
 GREETING_INPUTS = ("hello", "hi", "greetings", "sup", "what's up", "hey",)
 GREETING_RESPONSES = ["hi", "hey", "*nods*", "hi there", "hello", "I am glad! You are talking to me"]
 
