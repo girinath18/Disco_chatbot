@@ -15,7 +15,6 @@ urlpatterns = [
     path('logout/', LogoutView.as_view(next_page='login'), name='logout'),
     path('chat/', views.chat_view, name='chat_view'),
     path('chat-history/', chat_history_view, name='chat_history'),
-    path('upload/', views.upload_file, name='upload_file'),
 ]
 
 # Serve static and media files during development

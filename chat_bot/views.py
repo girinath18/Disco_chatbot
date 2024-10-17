@@ -5,15 +5,18 @@ from django.contrib.auth import logout
 from django.http import JsonResponse
 from django.contrib.auth.hashers import make_password
 from .models import CustomUser
-from .models import UploadedFile
 from django.contrib.auth.decorators import login_required
 from .models import Conversation
+from django.conf import settings 
+from django.contrib.auth.forms import AuthenticationForm
+from .models import ChatHistory 
 import json
 import random
 import nltk
 import os
 import string
 import warnings
+from django.conf import settings
 from nltk.stem import WordNetLemmatizer
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
@@ -66,13 +69,11 @@ def response(user_response, sent_tokens):
     robo_response = ''
     sent_tokens.append(user_response)
     
-    # Check if we have more than one token
     if len(sent_tokens) > 1:
         TfidfVec = TfidfVectorizer(tokenizer=LemNormalize, stop_words='english')
         tfidf = TfidfVec.fit_transform(sent_tokens)
         vals = cosine_similarity(tfidf[-1], tfidf)
         
-        # Proceed only if vals has more than one entry
         if vals.shape[1] > 1:
             idx = vals.argsort()[0][-2]
             flat = vals.flatten()
@@ -91,49 +92,48 @@ def response(user_response, sent_tokens):
     sent_tokens.pop()
     return robo_response
 
+# Load default texts from file
+def load_default_texts():
+    text_files_dir = os.path.join(settings.BASE_DIR, 'chat_bot', 'text_files')
+    texts = []
+
+    print(f"Loading texts from: {text_files_dir}")  # Debugging line
+
+    try:
+        for filename in os.listdir(text_files_dir):
+            if filename.endswith('.txt'):
+                file_path = os.path.join(text_files_dir, filename)
+                print(f"Reading file: {file_path}")  # Log the file being read
+                with open(file_path, 'r', encoding='utf-8') as file:
+                    texts.append(file.read())
+    except Exception as e:
+        print(f"Error reading text files: {e}")  # Log any exceptions
+
+    return "\n".join(texts)  # Return combined text content
+
+# Load default text content at startup
+default_text_content = load_default_texts()
+sent_tokens = nltk.sent_tokenize(default_text_content)  # Tokenize the default text
+
 # Chatbot view
 def chat_view(request):
     if request.method == "POST":
         data = json.loads(request.body)
         user_message = data.get("message", "")
-        
-        # Initialize session tokens if not present
-        if 'sent_tokens' not in request.session:
-            request.session['sent_tokens'] = []
 
-        sent_tokens = request.session['sent_tokens']
+        # Generate bot response based on default text file
+        response_message = chatbot_response(user_message)
 
-        # Generate bot response using your existing logic
-        response_message = chatbot_response(user_message, sent_tokens)
-
-        # Store both user and bot messages in the database
-        Conversation.objects.create(user=request.user, message=user_message)  # Store user's message
-        Conversation.objects.create(user=request.user, message=response_message)  # Store bot's response
+        # Store messages in the database
+        Conversation.objects.create(user=request.user, message=user_message)
+        Conversation.objects.create(user=request.user, message=response_message)
 
         return JsonResponse({"response": response_message})
 
-    return render(request, "chat_interface.html")  # Render the chat page for GET requests
-
-def upload_file(request):
-    if request.method == "POST":
-        uploaded_file = request.FILES.get('file')
-        if uploaded_file:
-            try:
-                content = uploaded_file.read().decode('utf-8')
-                sent_tokens = nltk.sent_tokenize(content)
-                request.session['sent_tokens'] = sent_tokens
-
-                # Redirect to the chat view after successful upload
-                return redirect('chat_view')
-            except Exception as e:
-                return JsonResponse({"error": str(e)}, status=500)
-        else:
-            return JsonResponse({"error": "No file uploaded"}, status=400)
-
-    return render(request, "upload_file.html")
+    return render(request, 'chat_bot/chat_interface.html')  # Render chat page for GET requests
 
 # Chatbot response logic
-def chatbot_response(user_input, sent_tokens):
+def chatbot_response(user_input):
     if user_input.lower() == 'bye':
         return "Bye! take care.."
     elif greeting(user_input) is not None:
@@ -147,40 +147,40 @@ def signup(request):
         username = request.POST['username']
         password = request.POST['password']
 
-        # Check if the username already exists
+        if len(username) < 3:
+            return JsonResponse({"message": "Username must be at least 3 characters long"}, status=400)
+
+        if len(password) < 8:
+            return JsonResponse({"message": "Password must be at least 8 characters long"}, status=400)
+
         if User.objects.filter(username=username).exists():
             return JsonResponse({"message": "Username already exists"}, status=400)
 
-        # Hash the password before storing it for security
         user = User.objects.create(username=username, password=make_password(password))
         user.save()
-
         return JsonResponse({"message": "User created successfully"}, status=201)
 
-    # If it's a GET request, render the signup form
     return render(request, 'signup.html')
 
 # Login view
 def login_view(request):
     if request.method == 'POST':
-        username = request.POST['username']
-        password = request.POST['password']
-
-        # Authenticate user
-        user = authenticate(request, username=username, password=password)
-
-        if user is not None:
-            login(request, user)
-            return redirect('dashboard')  
-        else:
-            return JsonResponse({"message": "Invalid credentials"}, status=400)
-
-    return render(request, 'login.html')
+        form = AuthenticationForm(data=request.POST)
+        if form.is_valid():
+            username = form.cleaned_data.get('username')
+            password = form.cleaned_data.get('password')
+            user = authenticate(username=username, password=password)
+            if user is not None:
+                login(request, user)
+                return redirect('dashboard')  # Adjust the redirect URL as needed
+    else:
+        form = AuthenticationForm()
+    return render(request, 'chat_bot/login.html', {'form': form})
 
 # Dashboard view
 @login_required  # Ensures only logged-in users can access the dashboard
 def dashboard(request):
-    return render(request, 'dashboard.html')
+    return render(request, 'chat_bot/dashboard.html')
 
 def logout_view(request):
     logout(request)
@@ -194,14 +194,7 @@ def profile_view(request):
 
 @login_required
 def chat_history_view(request):
-    chat_history = ChatHistory.objects.annotate(
-        date=TruncDate('timestamp')
-    ).values('date').annotate(count=Count('id'))
+    chat_messages = ChatHistory.objects.all()
+    template_path = os.path.join(settings.BASE_DIR, 'templates', 'chat_history.html')
+    return render(request, template_path, {'chat_messages': chat_messages})
 
-    # Fetch messages associated with each date
-    chat_messages = {}
-    for entry in chat_history:
-        messages = ChatHistory.objects.filter(timestamp__date=entry['date'])
-        chat_messages[entry['date']] = messages
-
-    return render(request, 'chat_history.html', {'chat_messages': chat_messages})
